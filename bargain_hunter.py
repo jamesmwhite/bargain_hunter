@@ -10,6 +10,7 @@ import telepot
 class BargainFinder():
 
     def __init__(self):
+        self.setup_paths()
         self.telegram_token = None
         self.current_msg_id = self.check_for_message_id()
         print('message id = {}'.format(self.current_msg_id))
@@ -27,9 +28,19 @@ class BargainFinder():
             return
         self.setup_telgram()
 
+    def setup_paths(self):
+        scriptdir = os.path.dirname(os.path.realpath(__file__))
+        self.telegram_token_path = os.path.join(scriptdir,'telegram_token.txt')
+        self.msg_id_path = os.path.join(scriptdir,'msg_id.txt')
+        self.help_path = os.path.join(scriptdir,'help.txt')
+        self.search_terms_path = os.path.join(scriptdir,'search_terms.txt')
+        
+
+        
+
     def read_telegram_token(self):
         try:
-            with open('telegram_token.txt') as f:
+            with open(self.telegram_token_path) as f:
                 self.telegram_token = f.read()
                 
         except Exception as e:
@@ -43,7 +54,7 @@ class BargainFinder():
                 return
             self.current_msg_id = msg_id
             print('writing message id {}'.format(msg_id))
-            with open('msg_id.txt','w') as f:
+            with open(self.msg_id_path,'w') as f:
                 f.write(str(msg_id))
 
         except Exception as e:
@@ -52,7 +63,7 @@ class BargainFinder():
 
     def check_for_message_id(self):
         try:
-            with open('msg_id.txt','r') as f:
+            with open(self.msg_id_path,'r') as f:
                 msg_id = f.read()
                 if msg_id is None or msg_id.strip() == '':
                     return None
@@ -92,12 +103,12 @@ class BargainFinder():
             print(e)
 
     def print_help(self):
-        with open('help.txt') as f:
+        with open(self.help_path) as f:
             self.send_message(f.read())
 
     def read_terms(self):
         try:
-            with open('search_terms.txt', 'r') as f:
+            with open(self.search_terms_path, 'r') as f:
                 terms = json.load(f)
                 for term in terms.keys():
                     if term is not None and len(term) > 0:
@@ -109,14 +120,14 @@ class BargainFinder():
 
     def add_term(self, term):
         self.search_terms[term] = None
-        with open('search_terms.txt', 'w') as f:
+        with open(self.search_terms_path, 'w') as f:
             json.dump(self.search_terms, f)
         self.kill_bargain_thread()
         self.print_terms()
 
     def remove_term(self, term):
         self.search_terms.pop(term)
-        with open('search_terms.txt', 'w') as f:
+        with open(self.search_terms_path, 'w') as f:
             json.dump(self.search_terms, f)
         self.kill_bargain_thread()
         self.print_terms()

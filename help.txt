@@ -1,0 +1,6 @@
+Commands:
+<command> info
+<p> prints list of search terms
+<t term> adds term to search terms e.g. t coffee adds the term coffee to search terms
+<r term> removes term from search terms e.g. r coffee removes the term coffee from search terms
+<exit> exits app

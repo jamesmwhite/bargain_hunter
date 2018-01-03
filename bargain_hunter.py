@@ -182,6 +182,7 @@ def check_for_bargains(stop, bot, msg_id, terms):
     try:
         check_count = 0
         print(terms)
+        found_terms = {}
         while not stop.isSet():
             if check_count == 0:
                 print('checking for bargains...')
@@ -200,7 +201,7 @@ def check_for_bargains(stop, bot, msg_id, terms):
 
                     if link is not None and '/thread/post/' in link:
                         for term in terms:
-                            if term in l.text.lower():    
+                            if term in l.text.lower():
                                 hit_text = '"{}" triggered hit for: '.format(term)
                                 link = '{}{}'.format('https:', link)
                     elif link is not None and '/b/thread/' in link:
@@ -214,8 +215,10 @@ def check_for_bargains(stop, bot, msg_id, terms):
                                 hit_text = '"{}" triggered hit for: '.format(term)
                                 link = '{}{}'.format('https://boards.ie/vbulletin/', link)
                     if hit_text is not None:
-                        message_text = '{} {} aa {}'.format(hit_text, l.text.strip(), link)
-                        bot.sendMessage(msg_id, message_text)
+                        if hit_text not in found_terms:
+                            found_terms[hit_text] = None
+                            message_text = '{} {} aa {}'.format(hit_text, l.text.strip(), link)
+                            bot.sendMessage(msg_id, message_text)
                 print('completed check')
             check_count = check_count + 1
             if check_count == 12:

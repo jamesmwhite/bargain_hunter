@@ -99,3 +99,7 @@ ENV/
 
 # mypy
 .mypy_cache/
+
+telegram_token.txt
+msg_id.txt
+search_terms.txt

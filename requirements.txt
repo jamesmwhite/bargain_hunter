@@ -1,3 +1,3 @@
 requests
-telepot
+twx.botapi
 beautifulsoup4

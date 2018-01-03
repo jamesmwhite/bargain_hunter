@@ -1,10 +1,13 @@
 import os
 import json
 import time
+import sys, traceback
 from threading import Thread, Event
 import requests
 from bs4 import BeautifulSoup
-import telepot
+from twx.botapi import TelegramBot, ReplyKeyboardMarkup, Chat, Message
+import urllib3
+
 
 
 class BargainFinder():
@@ -26,6 +29,7 @@ class BargainFinder():
             print('no token set, paste token string into telegram_token.txt')
             self.running = False
             return
+        print(self.telegram_token)
         self.setup_telgram()
 
     def setup_paths(self):
@@ -44,7 +48,8 @@ class BargainFinder():
                 self.telegram_token = f.read()
                 
         except Exception as e:
-            print(e)
+            # print(e)
+            traceback.print_exc()
         
 
 
@@ -58,7 +63,8 @@ class BargainFinder():
                 f.write(str(msg_id))
 
         except Exception as e:
-            print(e)
+            # print(e)
+            traceback.print_exc()
         
 
     def check_for_message_id(self):
@@ -75,15 +81,17 @@ class BargainFinder():
         if len(message) > 4000:
                 message = message[-4000:]
         try:
-            self.bot.sendMessage(self.current_msg_id, message)
+            self.bot.send_message(self.current_msg_id, message)
+            # self.bot.send_message()
         except Exception as e:
-            print(e)
+            # print(e)
+            traceback.print_exc()
 
-    def handle_message(self, msg):
+    def handle_message(self, update):
         try:
-            print(msg)
-            self.persist_message_id(msg['from']['id'])
-            message = msg['text']
+            print(update)
+            self.persist_message_id(update.message.chat.id)
+            message = update.message.text
             message = message.lower()
             if message == 'ping':
                 self.send_message("pong")
@@ -100,7 +108,8 @@ class BargainFinder():
             elif message =='h' or message == 'help':
                 self.print_help()
         except Exception as e:
-            print(e)
+            # print(e)
+            traceback.print_exc()
 
     def print_help(self):
         with open(self.help_path) as f:
@@ -143,10 +152,15 @@ class BargainFinder():
 
     def setup_telgram(self):
         try:
-            self.bot = telepot.Bot(self.telegram_token)
-            self.bot.message_loop(self.handle_message)
+            
+            # self.bot = telepot.Bot(self.telegram_token)
+            # self.bot.message_loop(self.handle_message)
+            self.bot = TelegramBot(self.telegram_token)
+            self.bot.update_bot_info().wait()
+            print(self.bot.username)
         except Exception as e:
-            print(e)
+            # print(e)
+            traceback.print_exc()
 
     def kill_bargain_thread(self):
         try:
@@ -157,22 +171,33 @@ class BargainFinder():
                         time.sleep(2)
                     self.bargain_spider_thread = None
         except Exception as e:
-            print(e)
+            # print(e)
+            traceback.print_exc()
 
     def run_app(self):
         try:
             bargain_spider_thread = None
+            last_update_id = None
             while self.running:
                 if self.bargain_spider_thread is None and self.current_msg_id is not None:
                     self.stop = Event()
                     self.bargain_spider_thread = Thread(target=check_for_bargains, args=(self.stop, self.bot, self.current_msg_id, self.search_terms.keys()))
                     self.bargain_spider_thread.start()
+
+                updates = self.bot.get_updates(offset=last_update_id).wait()
+                for update in updates:
+                    print(update.update_id)
+                    last_update_id = update.update_id + 1
+                    self.handle_message(update)
+
                 time.sleep(1)
+
             self.send_message('Exiting as requested')
             print('Exiting app as requested')
         except Exception as e:
             print('problem with app, exiting')
-            print(e)
+            # print(e)
+            traceback.print_exc()
         finally:
             self.kill_bargain_thread()
 
@@ -197,15 +222,20 @@ def check_for_bargains(stop, bot, msg_id, terms):
                                 link = 'https://www.boards.ie/vbulletin/{}'.format(l.get('href'))
                                 message_text = '{} {} [inline URL]({})'.format(hit_text, l.text, link)
                                 print('{}'.format(message_text))
-                                bot.sendMessage(msg_id, message_text)
+                                bot.send_message(msg_id, message_text)
                 print('completed check')
             check_count = check_count + 1
             if check_count == 12:
                 check_count = 0
             time.sleep(5)
     except Exception as e:
-        print(e)
+        traceback.print_exc()
+        # print(e)
         
 
-bf = BargainFinder()
-bf.run_app()
+try:
+    bf = BargainFinder()
+    bf.run_app()
+except Exception as e:
+    # print(e)
+    traceback.print_exc()

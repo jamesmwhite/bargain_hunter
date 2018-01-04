@@ -3,10 +3,9 @@ import json
 import time
 import sys, traceback
 from threading import Thread, Event
-import requests
-from bs4 import BeautifulSoup
 import telepot
-
+from handlers.boards import check_for_bargains
+from terms import Terms
 
 class BargainFinder():
 
@@ -17,9 +16,9 @@ class BargainFinder():
         print('message id = {}'.format(self.current_msg_id))
         self.running = True
         self.bot = None
-        
+        self.terms = Terms()
         self.search_terms = {}
-        self.read_terms()
+        self.terms.read_terms()
         self.stop = None
         self.bargain_spider_thread = None
         self.read_telegram_token()
@@ -34,21 +33,13 @@ class BargainFinder():
         self.telegram_token_path = os.path.join(scriptdir,'telegram_token.txt')
         self.msg_id_path = os.path.join(scriptdir,'msg_id.txt')
         self.help_path = os.path.join(scriptdir,'help.txt')
-        self.search_terms_path = os.path.join(scriptdir,'search_terms.txt')
-        
-
-        
 
     def read_telegram_token(self):
         try:
             with open(self.telegram_token_path) as f:
                 self.telegram_token = f.readline().strip()
-                
         except Exception as e:
             traceback.print_exc()
-
-        
-
 
     def persist_message_id(self, msg_id):
         try:
@@ -58,11 +49,9 @@ class BargainFinder():
             print('writing message id {}'.format(msg_id))
             with open(self.msg_id_path,'w') as f:
                 f.write(str(msg_id))
-
         except Exception as e:
             traceback.print_exc()
         
-
     def check_for_message_id(self):
         try:
             with open(self.msg_id_path,'r') as f:
@@ -93,12 +82,17 @@ class BargainFinder():
                 self.running = False
             elif message.startswith('t '):
                 message = message[2:]
-                self.add_term(message)
+                new_terms = self.terms.add_term(message)
+                self.kill_bargain_thread()
+                self.send_message(new_terms)
             elif message.startswith('r '):
                 message = message[2:]
-                self.remove_term(message)
+                new_terms = self.terms.remove_term(message)
+                self.kill_bargain_thread()
+                self.send_message(new_terms)
             elif message =='p':
-                self.print_terms()
+                all_terms = self.terms.get_printable_terms()
+                self.send_message(all_terms)
             elif message =='h' or message == 'help':
                 self.print_help()
         except Exception as e:
@@ -106,42 +100,7 @@ class BargainFinder():
 
     def print_help(self):
         with open(self.help_path) as f:
-            self.send_message(f.read())
-
-    def read_terms(self):
-        try:
-            with open(self.search_terms_path, 'r') as f:
-                terms = json.load(f)
-                for term in terms.keys():
-                    if term is not None and len(term) > 0:
-                        print('reading term... {}'.format(term))
-                        self.search_terms[term] = None
-                    
-        except Exception as e:
-            print('problem reading search terms {}'.format(e))
-
-    def add_term(self, term):
-        self.search_terms[term] = None
-        with open(self.search_terms_path, 'w') as f:
-            json.dump(self.search_terms, f)
-        self.kill_bargain_thread()
-        self.print_terms()
-
-    def remove_term(self, term):
-        self.search_terms.pop(term)
-        with open(self.search_terms_path, 'w') as f:
-            json.dump(self.search_terms, f)
-        self.kill_bargain_thread()
-        self.print_terms()
-    
-    def print_terms(self):
-        ret_str = ''
-        instructions = '[t term] to add [r term] to remove'
-        for key in self.search_terms.keys():
-            ret_str = '{} {}{}'.format(ret_str, os.linesep, key)
-        if len(ret_str) == 0:
-            ret_str = 'No terms added yet'
-        self.send_message('{} {}{} '.format(ret_str, os.linesep, instructions))
+            self.send_message(f.read())    
 
     def setup_telgram(self):
         try:
@@ -167,7 +126,7 @@ class BargainFinder():
             while self.running:
                 if self.bargain_spider_thread is None and self.current_msg_id is not None:
                     self.stop = Event()
-                    self.bargain_spider_thread = Thread(target=check_for_bargains, args=(self.stop, self.bot, self.current_msg_id, self.search_terms.keys()))
+                    self.bargain_spider_thread = Thread(target=check_for_bargains, args=(self.stop, self.bot, self.current_msg_id, self.terms.get_terms().keys()))
                     self.bargain_spider_thread.start()
                 time.sleep(1)
             self.send_message('Exiting as requested')
@@ -177,56 +136,6 @@ class BargainFinder():
             traceback.print_exc()
         finally:
             self.kill_bargain_thread()
-
-def check_for_bargains(stop, bot, msg_id, terms):
-    try:
-        check_count = 0
-        print(terms)
-        found_terms = {}
-        while not stop.isSet():
-            if check_count == 0:
-                print('checking for bargains...')
-                r = requests.get('https://touch.boards.ie/forum/346')
-
-                soup = BeautifulSoup(r.content, 'html.parser')
-
-                links = soup.find_all('a')
-                for l in links:
-                    hit_text = None
-                    # print(l)
-                    if 'href' not in str(l):
-                        continue
-
-                    link = l.get('href').strip()
-
-                    if link is not None and '/thread/post/' in link:
-                        for term in terms:
-                            if term in l.text.lower():
-                                hit_text = '"{}" triggered hit for: '.format(term)
-                                link = '{}{}'.format('https:', link)
-                    elif link is not None and '/b/thread/' in link:
-                        for term in terms:
-                            if term in l.text.lower():    
-                                hit_text = '"{}" triggered hit for: '.format(term)
-                                link = '{}{}'.format('https://boards.ie', link)
-                    elif link is not None and 'showthread.php' in link:
-                        for term in terms:
-                            if term in l.text.lower():    
-                                hit_text = '"{}" triggered hit for: '.format(term)
-                                link = '{}{}'.format('https://boards.ie/vbulletin/', link)
-                    if hit_text is not None:
-                        if hit_text not in found_terms:
-                            found_terms[hit_text] = None
-                            message_text = '{} {} aa {}'.format(hit_text, l.text.strip(), link)
-                            bot.sendMessage(msg_id, message_text)
-                print('completed check')
-            check_count = check_count + 1
-            if check_count == 12:
-                check_count = 0
-            time.sleep(5)
-    except Exception as e:
-        traceback.print_exc()
-        
 
 bf = BargainFinder()
 bf.run_app()
